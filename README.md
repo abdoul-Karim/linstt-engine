@@ -1,4 +1,5 @@
-# LinStt-MVP
+# linstt-engine
+
 This is the repository for the LinSTT project, configuration and data.
 
 ## Initialisation
