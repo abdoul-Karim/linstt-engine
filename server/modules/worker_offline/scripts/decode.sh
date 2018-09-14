@@ -1,14 +1,18 @@
 #!/bin/bash
 
+# Copyright 2018 Linagora (author: Ilyes Rebai)
+# LinSTT project
+
+
 lvcsrRootDir=/opt/speech-to-text
 export KALDI_ROOT=$lvcsrRootDir/tools/kaldi
-export PATH=$PATH:$lvcsrRootDir/scripts/utils
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lvcsrRootDir/scripts/src/dependencies
 export PATH=$PWD/utils/:$KALDI_ROOT/src/bin:$KALDI_ROOT/tools/openfst/bin:$KALDI_ROOT/src/fstbin/:$KALDI_ROOT/src/gmmbin/:$KALDI_ROOT/src/featbin/:$KALDI_ROOT/src/lm/:$KALDI_ROOT/src/sgmmbin/:$KALDI_ROOT/src/sgmm2bin/:$KALDI_ROOT/src/fgmmbin/:$KALDI_ROOT/src/latbin/:$KALDI_ROOT/src/nnetbin:$KALDI_ROOT/src/nnet2bin/:$KALDI_ROOT/src/kwsbin:$KALDI_ROOT/src/online2bin/:$KALDI_ROOT/src/ivectorbin/:$KALDI_ROOT/src/lmbin/:$PWD:$PATH
 
 # Begin configuration section.
 mfcc_config=conf/mfcc.conf
 vad_config=conf/vad.conf
+ivector=false
+type=
 compress=true
 cmd=run.pl
 # End configuration section.
@@ -49,6 +53,22 @@ transdir=$amdir/decode_$fileRootName
 mfcc_config=$amdir"/"$mfcc_config
 vad_config=$amdir"/"$vad_config
 
+function confidence_score {
+  confidence=$lvcsrRootDir/trans/confidence_score.log
+  decode=$1
+  file=$2
+  $cmd JOB=1:1 $confidence \
+    lattice-to-ctm-conf --acoustic-scale=$acwt  \
+     ark:$lvcsrRootDir/trans/$file.lat \
+     $lvcsrRootDir/trans/log/sentence_confidence_score.txt
+  #Bayes_Risk
+  br=$(cat $confidence | grep "For utterance $file," | cut -d ',' -f2 | cut -d ' ' -f4)
+  #AVG_Confidence_per_Word
+  cw=$(cat $confidence | grep "For utterance $file," | cut -d ',' -f3 | cut -d ' ' -f5)
+  #Transcription
+  text=$(cat $decode | sed -e "s: *$::g" -e "s:^ *::g")
+  echo -n "{\"utterance\":\"$text\",\"br\":$br,\"cw\":$cw,\"message\":\"\"}" > $decode
+}
 
 [ -d $datadir ] || mkdir -p $datadir
 mkdir -p $lvcsrRootDir/trans
@@ -56,24 +76,58 @@ mkdir -p $lvcsrRootDir/trans
 
 if [ $decoder == "dnn" ]; then
 
+decode_conf=$amdir/online/conf/online_nnet2_decoding.conf
+decode_mdl=$amdir/online/final.mdl
+decode_graph=$amdir/online/graph/HCLG.fst
+decode_words=$amdir/online/graph/words.txt
+
+if $ivector; then
+  if [ -d $amdir/online/conf_ivector ]; then
+    decode_conf=$amdir/online/conf_ivector/online_nnet2_decoding.conf
+    decode_mdl=$amdir/online/final.ivector.mdl
+  else
+    error="You have activated ivector option. However, the decoding model is not designed to use this option (check the decode.cfg comments)."
+    echo -n "{\"utterance\":\"ERROR!!!\",\"message\":\"$error\"}" > $lvcsrRootDir/trans/decode_$fileRootName.log
+    exit 1
+  fi
+fi
+
+if [ $type != "none" ]; then
+  if [ ! -f $amdir/online/graph_${type}/HCLG.fst ]; then
+    error="You used $type option. However, the decoding model is not designed to use this option (check the decode.cfg comments)."
+    echo -n "{\"utterance\":\"ERROR!!!\",\"message\":\"$error\"}" > $lvcsrRootDir/trans/decode_$fileRootName.log
+    exit 1
+  else
+    decode_graph=$amdir/online/graph_${type}/HCLG.fst
+    decode_words=$amdir/online/graph_${type}/words.txt
+  fi
+fi
+
 mkdir -p $lvcsrRootDir/trans/log
 $cmd JOB=1:1 $lvcsrRootDir/trans/log/decode_$fileRootName.log \
   online2-wav-nnet2-latgen-faster --do-endpointing=false \
      --online=false \
-     --config=$amdir/online/conf/online_nnet2_decoding.conf \
+     --config=$decode_conf \
      --max-active=$max_active --beam=$beam --lattice-beam=$lattice_beam \
      --acoustic-scale=$acwt \
-     --word-symbol-table=$amdir/online/graph/words.txt \
-      $amdir/online/final.mdl \
-      $amdir/online/graph/HCLG.fst \
+     --word-symbol-table=$decode_words \
+      $decode_mdl \
+      $decode_graph \
       "ark:echo $fileRootName $fileRootName|" "scp:echo $fileRootName $file|" \
       ark:$lvcsrRootDir/trans/$fileRootName.lat
 
-cat $lvcsrRootDir/trans/log/decode_$fileRootName.log | grep "^$fileRootName" | cut -d ' ' -f2- > $lvcsrRootDir/trans/decode_$fileRootName.log
-
-#lattice-scale --inv-acoustic-scale=10 ark:$lvcsrRootDir/trans/$fileRootName.lat ark:- | \
-#lattice-best-path --word-symbol-table=$amdir/online/graph/words.txt ark:$lvcsrRootDir/trans/$fileRootName.lat ark,t:- | \
-#int2sym.pl -f 2- $amdir/online/graph/words.txt | cut -d ' ' -f2- > $lvcsrRootDir/trans/decode_$fileRootName.log
+  error=$(cat $lvcsrRootDir/trans/log/decode_$fileRootName.log | grep "^ERROR " | head -n 1)
+  if [[ $error == "" ]]; then
+    cat $lvcsrRootDir/trans/log/decode_$fileRootName.log | grep "^$fileRootName" | cut -d ' ' -f2- > $lvcsrRootDir/trans/decode_$fileRootName.log
+    if [ "$indiceData" = "True" ] ; then
+       confidence_score $lvcsrRootDir/trans/decode_$fileRootName.log $fileRootName
+    else
+       text=$(cat $lvcsrRootDir/trans/decode_$fileRootName.log | sed -e "s: *$::g" -e "s:^ *::g")
+       echo -n "{\"utterance\":\"$text\",\"message\":\"\"}" > $lvcsrRootDir/trans/decode_$fileRootName.log
+    fi
+  else
+    echo -n "{\"utterance\":\"ERROR!!!\",\"message\":\"$error\"}" > $lvcsrRootDir/trans/decode_$fileRootName.log
+  fi
 
 else
 
@@ -156,18 +210,13 @@ else
 	    --acoustic-scale=$acwt --allow-partial=true --word-symbol-table=$srcdir/Graph/words.txt $decode_extra_opts \
 	    $srcdir/final.mdl $srcdir/Graph/HCLG.fst "$feats" "ark:|gzip -c > $transdir/lat.JOB.gz" || exit 1;
 
-			if [ "$indiceData" = "True" ] ; then
-				gunzip -c $transdir/lat.1.gz |\
-				lattice-to-nbest --acoustic-scale=0.0883 --n=10 --lm-scale=1.0 ark:- ark:- | \
-				nbest-to-ctm --precision=1 ark:- - | utils/int2sym.pl -f 5 $srcdir/Graph/words.txt > $transdir/indice_confiance_brut.txt
-
-				$lvcsrRootDir/scripts/./extractorData.sh $transdir/indice_confiance_brut.txt > $transdir/indice_confiance.txt
-			fi
-
 	fi
 	mv $transdir $lvcsrRootDir/trans
 	cat $lvcsrRootDir/trans/decode_$fileRootName/log/decode.1.log | grep "^$fileRootName" | cut -d ' ' -f2- > $lvcsrRootDir/trans/decode_$fileRootName.log
 
+        if [ "$indiceData" = "True" ] ; then
+          confidence_score $lvcsrRootDir/trans/decode_$fileRootName.log $fileRootName
+        fi
 
 fi
 	### for next sprint add

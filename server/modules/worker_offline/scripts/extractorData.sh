@@ -15,7 +15,7 @@ languageScore[previousId]=0
 
 
 #Position of important colonne 
-posName=0
+posName=$2
 posAcoustic=2
 posLanguage=3
 posUtterance=4
@@ -61,20 +61,25 @@ languageScore[$previousId]="$(echo "scale=2; ${languageScore[$previousId]}/$coun
 
 
 #start to 1, no id 0 stored
-echo -n "{\"hypotheses\":["
-for i in `seq 1 $previousId`; do
-		if [ -z "${acousticScore[$i]}" ]; then
-				acousticScore[$i]=0.0
-		fi
 
-		if [ -z "${languageScore[$i]}" ]; then
-				languageScore[$i]=0.0
-		fi
+if [ "$posName" -eq 1 ]; then
+	echo -n "{\"utterance\":\"${utteranceValue[1]}\",\"acousticScore\":${acousticScore[1]},\"languageScore\":${languageScore[1]}}"
+else 
+	echo -n "{\"hypotheses\":["
+	for i in `seq 1 $previousId`; do
+			if [ -z "${acousticScore[$i]}" ]; then
+					acousticScore[$i]=0.0
+			fi
 
-		if [ "$i" -eq "$previousId" ]; then
-			echo -n "{\"utterance\":\"${utteranceValue[$i]}\",\"acousticScore\":${acousticScore[$i]},\"languageScore\":${languageScore[$i]}}"
-		else
-			echo -n "{\"utterance\":\"${utteranceValue[$i]}\",\"acousticScore\":${acousticScore[$i]},\"languageScore\":${languageScore[$i]}},"
-		fi
-done
-echo -n "]}"
+			if [ -z "${languageScore[$i]}" ]; then
+					languageScore[$i]=0.0
+			fi
+
+			if [ "$i" -eq "$previousId" ]; then
+				echo -n "{\"utterance\":\"${utteranceValue[$i]}\",\"acousticScore\":${acousticScore[$i]},\"languageScore\":${languageScore[$i]}}"
+			else
+				echo -n "{\"utterance\":\"${utteranceValue[$i]}\",\"acousticScore\":${acousticScore[$i]},\"languageScore\":${languageScore[$i]}},"
+			fi
+	done
+	echo -n "]}"
+fi

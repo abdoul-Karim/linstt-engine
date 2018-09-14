@@ -2,12 +2,12 @@ swagger: "2.0"
 
 info:
   version: 1.0.0
-  title: LinSTT
+  title: LinSTT Air-France
   description: A simple way to test LinSTT API to learn how to use API
 
 schemes:
   - http
-host: localhost:8888
+host: beta.linto.ai:80/api/
 basePath: /
 
 paths:

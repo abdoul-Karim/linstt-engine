@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Jan  3 17:10:23 2018
+Updated on Wed Sep 12 15:18:00 2018
 
-@author: rbaraglia
+@authors: {rbaraglia, irebai}@linagora.com
 """
+
 import os
 import argparse
 import threading
@@ -27,7 +29,7 @@ SERVER_IP = worker_settings.get('server_params', 'server_ip')
 SERVER_PORT = worker_settings.get('server_params', 'server_port')
 SERVER_TARGET = worker_settings.get('server_params', 'server_target')
 TEMP_FILE_PATH = worker_settings.get('worker_params', 'temp_file_location')
-INDICE_DATA = True if worker_settings.get('worker_params', 'indice_data') == 'true' else False
+INDICE_DATA = True if worker_settings.get('worker_params', 'confidence_score') == 'true' else False
 NUM_JOBS = worker_settings.get('worker_params', 'number_jobs')
 NUM_THREADS = worker_settings.get('worker_params', 'number_threads')
 
@@ -48,9 +50,13 @@ DECODER_MAXACT = decoder_settings.get('decoder_params', 'max_active')
 DECODER_BEAM = decoder_settings.get('decoder_params', 'beam')
 DECODER_LATBEAM = decoder_settings.get('decoder_params', 'lattice_beam')
 DECODER_ACWT = decoder_settings.get('decoder_params', 'acwt')
+DECODER_IVEC = "true" if decoder_settings.get('decoder_params', 'ivector') == 'true' else "false"
+if decoder_settings.get('decoder_params','type') == '':
+   DECODER_TYPE = 'none'
+else:
+   DECODER_TYPE = decoder_settings.get('decoder_params', 'type')
 DECODER_MFCC = decoder_settings.get('decoder_params', 'mfcc_config')
 DECODER_VAD = decoder_settings.get('decoder_params', 'vad_config')
-
 
 
 if "OFFLINE_PORT" in os.environ:
@@ -74,7 +80,7 @@ class WorkerWebSocket(WebSocketClient):
             json_msg = json.loads(str(m))
         except:
             logging.debug("Message received: %s" % str(m))
-        else: 
+        else:
             if 'uuid' in json_msg.keys():
                 self.client_uuid = json_msg['uuid']
                 self.fileName = self.client_uuid.replace('-', '')
@@ -83,7 +89,7 @@ class WorkerWebSocket(WebSocketClient):
                 with open(self.filepath, 'wb') as f:
                     f.write(self.file)
                 logging.debug("FileName received: %s" % self.fileName)
-                # TODO: preprocessing ? (sox python)
+                # preprocessing
                 if PREPROCESSING:
                     logging.debug("Signal Processing")
                     if NOISE:
@@ -94,6 +100,10 @@ class WorkerWebSocket(WebSocketClient):
                              subprocess.call("./rnnoise.sh "+self.fileName+".wav ", shell=True)
                         else:
                              logging.debug("not recognized noise method")
+                    else:
+                        logging.debug("sox processing")
+                        subprocess.call("sox "+TEMP_FILE_PATH+self.fileName+".wav -t wav -r 16000 -c 1 "+TEMP_FILE_PATH+self.fileName+"_tmp.wav; mv "+TEMP_FILE_PATH+self.fileName+"_tmp.wav "+TEMP_FILE_PATH+self.fileName+".wav", shell=True);
+
                     if SILENCE:
                         logging.debug("silence parameter activated. Method: "+SILENCE_METHOD)
                         if SILENCE_METHOD == 'signal_trimming':
@@ -102,27 +112,30 @@ class WorkerWebSocket(WebSocketClient):
                              nr.noise_reduce(self.filepath,self.filepath,'','True')
                         else:
                              logging.debug("not recognized silence method")
+                else:
+                    logging.debug("sox processing")
+                    subprocess.call("sox "+TEMP_FILE_PATH+self.fileName+".wav -t wav -r 16000 -c 1 "+TEMP_FILE_PATH+self.fileName+"_tmp.wav; mv "+TEMP_FILE_PATH+self.fileName+"_tmp.wav "+TEMP_FILE_PATH+self.fileName+".wav", shell=True);
 
                 # Offline decoder call
                 logging.debug("Offline decoder call")
-                subprocess.call("cd scripts; ./decode.sh --mfcc_config "+DECODER_MFCC+" --vad-config "+DECODER_VAD+" ../systems/models/ "+self.fileName+".wav "+str(INDICE_DATA)+" "+DECODER_MAXACT+" "+DECODER_BEAM+" "+DECODER_LATBEAM+" "+DECODER_ACWT+" "+DECODER_SYS+" "+NUM_JOBS+" "+NUM_THREADS, shell=True)
-                
+                subprocess.call("cd scripts; ./decode.sh --mfcc_config "+DECODER_MFCC+" --vad-config "+DECODER_VAD+" --ivector "+DECODER_IVEC+" --type "+DECODER_TYPE+" ../systems/models "+self.fileName+".wav "+str(INDICE_DATA)+" "+DECODER_MAXACT+" "+DECODER_BEAM+" "+DECODER_LATBEAM+" "+DECODER_ACWT+" "+DECODER_SYS+" "+NUM_JOBS+" "+NUM_THREADS, shell=True)
+
                 # Check result
                 if os.path.isfile('trans/decode_'+self.fileName+'.log'):
-                    if INDICE_DATA and os.path.isfile('trans/decode_'+self.fileName+'/indice_confiance.txt'):
-                        with open('trans/decode_'+self.fileName+'/indice_confiance.txt', 'r') as resultFile:
+                    if INDICE_DATA:
+                        with open('trans/decode_'+self.fileName+'.log', 'r', encoding='utf-8') as resultFile:
                             result = resultFile.read().strip()
-                            logging.debug("Transcription is: %s" % result)
+                            logging.debug("Transcription with indice data is : %s" % result)
                             self.send_result(result)
                     else:
                         with open('trans/decode_'+self.fileName+'.log', 'r', encoding='utf-8') as resultFile:
                             result = resultFile.read().strip()
-                            logging.debug("Transcription is: %s", result)
+                            logging.debug("Transcription without indice data is: %s", result)
                             self.send_result(result)
                 else:
                     logging.error("Worker Failed to create transcription file")
                     self.send_result("")
-                
+
                 # Delete temporary files
                 for file in os.listdir(TEMP_FILE_PATH):
                     os.remove(TEMP_FILE_PATH+file)
@@ -131,7 +144,20 @@ class WorkerWebSocket(WebSocketClient):
         logging.debug('POST received')
 
     def send_result(self, result=""):
-        msg = json.dumps({u'uuid': self.client_uuid, u'transcription':result, u'trust_ind':u"0.1235"})
+        logging.debug("Transcription without indice data is: %s", result)
+        msg = ""
+        try:
+            data = json.loads(result)
+            if(data['message']==""):
+                if INDICE_DATA:
+                    msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'bayes_risk':data['br'], u'avg_confedence_per_word':data['cw']})
+                else:
+                    msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'confidence_score':'Desactivated'}) 
+            else:
+                msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'message':data['message']})
+
+        except Exception as e:
+            msg = json.dumps({u'uuid': self.client_uuid, u'ERROR':'SYSTEM ERROR!!!!!'})
         self.client_uuid = None
         self.send(msg)
 
@@ -139,12 +165,12 @@ class WorkerWebSocket(WebSocketClient):
         msg = json.dumps({u'uuid': self.client_uuid, u'error':message})
         self.send(msg)
 
-    def closed(self, code, reason=None): 
+    def closed(self, code, reason=None):
         pass
-    
+
     def finish_request(self):
         pass
-    
+
 @tenacity.retry(
         wait=tenacity.wait.wait_fixed(2),
         stop=tenacity.stop.stop_after_delay(45),
