@@ -87,8 +87,7 @@ The test should display "Test succefull"
 Here is the step for docker-compose
 
 1. Configuration
-Verify the data on .env file.
-- MODEL_CONFIG : path to worker.config
+Rename the .envdefault in .env then verify the data on .env file.
 - MODEL_PATH : Path of the model to use
 - OFFLINE_PORT : Port of the server (recommended : 8888)
 - SWAGGER_PATH : Configuration folder for swagger to load (recommended : ./document)
@@ -101,7 +100,7 @@ Build the docker image
 3. Start
 Run the LinStt-Service
 `docker-compose up`
-Run LinStt-Service with documentation and swagger (localhost)
+Run with documentation and swagger (localhost)
 `docker-compose -f docker-compose.yml -f docker-optional-service.yml up`
 
 ### Docker Deployment

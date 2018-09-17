@@ -38,11 +38,19 @@ RUN cd /opt && wget http://www-lium.univ-lemans.fr/diarization/lib/exe/fetch.php
     mkdir -p $BASE_DIR
 
 # Build kaldi
-RUN git clone https://ci.linagora.com/aheba/kaldi_2015 /opt/kaldi && \
+COPY kaldi-soft /opt/kaldi-soft
+RUN cd /opt && git clone https://github.com/kaldi-asr/kaldi.git && \
+    cp /opt/kaldi-soft/Makefile            /opt/kaldi/src/Makefile && \
+    cp /opt/kaldi-soft/bin/Makefile        /opt/kaldi/src/bin && \
+    cp /opt/kaldi-soft/featbin/Makefile    /opt/kaldi/src/featbin && \
+    cp /opt/kaldi-soft/gmmbin/Makefile     /opt/kaldi/src/gmmbin && \
+    cp /opt/kaldi-soft/ivectorbin/Makefile /opt/kaldi/src/ivectorbin && \
+    cp /opt/kaldi-soft/latbin/Makefile     /opt/kaldi/src/latbin && \
+    cp /opt/kaldi-soft/latbin/lattice-to-ctm-conf2.cc /opt/kaldi/src/latbin && \
+    cp /opt/kaldi-soft/online2bin/Makefile /opt/kaldi/src/online2bin && \
     cd /opt/kaldi/tools && \
-    make && \
-    cd /opt/kaldi/src && ./configure --shared && make depend && make
-
+    make -j$(nproc) && \
+    cd /opt/kaldi/src && ./configure --shared && make depend -j$(nproc) && make -j$(nproc)
 
 # Install RNNOISE package
 RUN cd /opt && wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-64bit-static.tar.xz && tar xf ffmpeg-git-64bit-static.tar.xz && \
