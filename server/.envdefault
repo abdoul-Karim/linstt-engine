@@ -1,0 +1,6 @@
+MODEL_PATH=/path/to/model/folder
+MODEL_CONFIG=./modules/worker_offline/worker.config
+OFFLINE_PORT=8888
+ 
+SWAGGER_PATH=./document
+SWAGGER_JSON=/app/swagger/swagger.yml
