@@ -46,6 +46,7 @@ RUN cd /opt && git clone https://github.com/kaldi-asr/kaldi.git && \
     cp /opt/kaldi-soft/gmmbin/Makefile     /opt/kaldi/src/gmmbin && \
     cp /opt/kaldi-soft/ivectorbin/Makefile /opt/kaldi/src/ivectorbin && \
     cp /opt/kaldi-soft/latbin/Makefile     /opt/kaldi/src/latbin && \
+    cp /opt/kaldi-soft/latbin/lattice-to-ctm-conf2.cc /opt/kaldi/src/latbin && \
     cp /opt/kaldi-soft/online2bin/Makefile /opt/kaldi/src/online2bin && \
     cd /opt/kaldi/tools && \
     make -j$(nproc) && \

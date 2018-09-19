@@ -58,16 +58,18 @@ function confidence_score {
   decode=$1
   file=$2
   $cmd JOB=1:1 $confidence \
-    lattice-to-ctm-conf --acoustic-scale=$acwt  \
+    lattice-to-ctm-conf2 --acoustic-scale=$acwt  \
      ark:$lvcsrRootDir/trans/$file.lat \
      $lvcsrRootDir/trans/log/sentence_confidence_score.txt
   #Bayes_Risk
   br=$(cat $confidence | grep "For utterance $file," | cut -d ',' -f2 | cut -d ' ' -f4)
   #AVG_Confidence_per_Word
   cw=$(cat $confidence | grep "For utterance $file," | cut -d ',' -f3 | cut -d ' ' -f5)
+  #STD_per_sentence
+  std=$(cat $confidence | grep "For utterance $file," | cut -d ',' -f4 | cut -d ' ' -f5)
   #Transcription
   text=$(cat $decode | sed -e "s: *$::g" -e "s:^ *::g")
-  echo -n "{\"utterance\":\"$text\",\"br\":$br,\"cw\":$cw,\"message\":\"\"}" > $decode
+  echo -n "{\"utterance\":\"$text\",\"br\":$br,\"cw\":$cw,\"std\":$std,\"message\":\"\"}" > $decode
 }
 
 [ -d $datadir ] || mkdir -p $datadir

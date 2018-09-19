@@ -150,9 +150,9 @@ class WorkerWebSocket(WebSocketClient):
             data = json.loads(result)
             if(data['message']==""):
                 if INDICE_DATA:
-                    msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'bayes_risk':data['br'], u'avg_confedence_per_word':data['cw']})
+                    msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'avg_confidence_per_word':data['cw'], u'standard_deviation':data['std'], u'confidence_score':(data['cw']*(1-data['std']))})
                 else:
-                    msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'confidence_score':'Desactivated'}) 
+                    msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'confidence_score':'Desactivated'})
             else:
                 msg = json.dumps({u'uuid': self.client_uuid, u'transcription':data['utterance'], u'message':data['message']})
 
